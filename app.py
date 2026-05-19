@@ -363,10 +363,3 @@ if uploaded_video and analyze_btn:
 
     st.success("Video analysis completed successfully!")
 
-# =========================================================
-# FOOTER
-# =========================================================
-st.markdown("---")
-
-n
-""")
