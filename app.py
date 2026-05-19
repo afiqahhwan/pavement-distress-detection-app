@@ -15,11 +15,6 @@ st.set_page_config(
 st.title("🛣️ Intelligent Pavement Distress Detection System")
 
 st.markdown("""
-### Developed for Pavement Detection Research
-
-AI-powered road surface inspection system for automated pavement distress analysis.
-""")
-st.markdown("""
 ### 🔍 Pavement Distress Types Detected
 
 This intelligent system automatically detects:
