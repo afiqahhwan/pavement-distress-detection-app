@@ -57,6 +57,11 @@ h1, h2, h3 {
 # =========================================================
 st.title("🛣️ Intelligent Pavement Distress Detection System")
 
+st.markdown("""
+### Developed for Pavement Detection Research
+
+AI-powered road surface inspection system for automated pavement distress analysis.
+""")
 
 # =========================================================
 # DETECTION TYPES
@@ -134,8 +139,6 @@ def load_model():
 try:
 
     model = load_model()
-
-    st.success("✅ AI Model Loaded Successfully")
 
 except Exception as e:
 
@@ -370,11 +373,6 @@ if uploaded_video is not None:
             cap.release()
 
             out.release()
-
-            # =================================================
-            # SUCCESS MESSAGE
-            # =================================================
-            st.success("✅ Video Analysis Completed Successfully")
 
             # =================================================
             # METRICS
