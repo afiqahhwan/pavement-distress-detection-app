@@ -81,11 +81,11 @@ with st.sidebar:
     st.markdown("""
     ### Recommended Settings
 
-    - Video Format: MP4
+    - Format: MP4
     - Resolution: 720p
     - FPS: 24-30
-    - Supports Large Videos
-    - HD AI Processing
+    - Large video support
+    - AI HD processing
     """)
 
 # =========================================================
@@ -156,7 +156,7 @@ if uploaded_video is not None:
 
     if st.button("🚀 Start AI Analysis"):
 
-        with st.spinner("Analyzing road condition..."):
+        with st.spinner("Analyzing pavement condition..."):
 
             # =================================================
             # SAVE INPUT VIDEO
@@ -178,7 +178,6 @@ if uploaded_video is not None:
             cap = cv2.VideoCapture(input_path)
 
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
             fps = cap.get(cv2.CAP_PROP_FPS)
@@ -194,7 +193,7 @@ if uploaded_video is not None:
 
             output_path = "processed_output.mp4"
 
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            fourcc = cv2.VideoWriter_fourcc(*'avc1')
 
             out = cv2.VideoWriter(
                 output_path,
@@ -220,9 +219,7 @@ if uploaded_video is not None:
             # =================================================
 
             total_detections = 0
-
             crack_count = 0
-
             pothole_count = 0
 
             frame_index = 0
@@ -243,7 +240,7 @@ if uploaded_video is not None:
                 try:
 
                     # =========================================
-                    # OPTIONAL FRAME SKIPPING
+                    # SKIP EVERY 2ND FRAME
                     # =========================================
 
                     if frame_index % 2 != 0:
@@ -271,16 +268,16 @@ if uploaded_video is not None:
                     detections = sv.Detections.from_inference(result)
 
                     # =========================================
-                    # SCALE BOXES TO HD VIDEO
+                    # SCALE DETECTIONS
                     # =========================================
 
                     scale_x = width / 640
-
                     scale_y = height / 360
 
-                    detections.xyxy[:, [0, 2]] *= scale_x
+                    if len(detections) > 0:
 
-                    detections.xyxy[:, [1, 3]] *= scale_y
+                        detections.xyxy[:, [0, 2]] *= scale_x
+                        detections.xyxy[:, [1, 3]] *= scale_y
 
                     # =========================================
                     # LABELS
@@ -291,7 +288,6 @@ if uploaded_video is not None:
                     for pred in result["predictions"]:
 
                         cls = pred["class"]
-
                         conf = pred["confidence"]
 
                         labels.append(
@@ -366,7 +362,7 @@ if uploaded_video is not None:
 
                     cv2.putText(
                         annotated_frame,
-                        f"Total Detections: {total_detections}",
+                        f"Detections: {total_detections}",
                         (40, 135),
                         cv2.FONT_HERSHEY_SIMPLEX,
                         0.8,
@@ -411,22 +407,23 @@ if uploaded_video is not None:
                 )
 
             # =================================================
-            # RELEASE RESOURCES
+            # RELEASE
             # =================================================
 
             cap.release()
-
             out.release()
-
             cv2.destroyAllWindows()
 
             # =================================================
-            # DISPLAY OUTPUT
+            # SHOW RESULTS
             # =================================================
 
             st.success("AI Analysis Complete")
 
-            st.video(output_path)
+            with open(output_path, "rb") as video_file:
+                video_bytes = video_file.read()
+
+            st.video(video_bytes)
 
             # =================================================
             # METRICS
