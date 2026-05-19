@@ -176,6 +176,7 @@ if uploaded_video is not None:
             # =================================================
 
             cap = cv2.VideoCapture(input_path)
+            max_frames = 1000
 
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -243,7 +244,7 @@ if uploaded_video is not None:
                     # SKIP EVERY 2ND FRAME
                     # =========================================
 
-                    if frame_index % 2 != 0:
+                    if frame_index % 5 != 0:
                         frame_index += 1
                         continue
 
@@ -253,7 +254,7 @@ if uploaded_video is not None:
 
                     small_frame = cv2.resize(
                         frame,
-                        (640, 360)
+                        (416, 234)
                     )
 
                     # =========================================
