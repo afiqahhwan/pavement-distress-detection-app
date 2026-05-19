@@ -1,7 +1,6 @@
 import streamlit as st
 import cv2
 import tempfile
-import os
 import supervision as sv
 from roboflow import Roboflow
 
@@ -15,10 +14,11 @@ st.set_page_config(
 )
 
 # =========================================================
-# CUSTOM CSS
+# CUSTOM UI STYLE
 # =========================================================
 st.markdown("""
 <style>
+
 .main {
     background-color: #0B1020;
     color: white;
@@ -37,12 +37,6 @@ st.markdown("""
     background-color: #6D28D9;
 }
 
-.metric-box {
-    background-color: #111827;
-    padding: 15px;
-    border-radius: 10px;
-    text-align: center;
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -71,8 +65,13 @@ from uploaded road inspection videos.
 # =========================================================
 # ROBOFLOW CONFIG
 # =========================================================
-ROBOFLOW_API_KEY = "YOUR_PRIVATE_API_KEY"
+
+ROBOFLOW_API_KEY = "PEg5q48Ar8j8zKbAqHd7"
+
+WORKSPACE_ID = "wans-workspace-na8wt"
+
 PROJECT_ID = "pavement-distress-detection-c5hzn"
+
 VERSION_NUMBER = 1
 
 # =========================================================
@@ -80,15 +79,21 @@ VERSION_NUMBER = 1
 # =========================================================
 @st.cache_resource
 def load_model():
+
     rf = Roboflow(api_key=ROBOFLOW_API_KEY)
-    project = rf.workspace().project(PROJECT_ID)
+
+    workspace = rf.workspace(WORKSPACE_ID)
+
+    project = workspace.project(PROJECT_ID)
+
     model = project.version(VERSION_NUMBER).model
+
     return model
 
 model = load_model()
 
 # =========================================================
-# VIDEO SETTINGS
+# SETTINGS
 # =========================================================
 FRAME_SKIP = 2
 RESIZE_WIDTH = 640
@@ -103,15 +108,18 @@ label_annotator = sv.LabelAnnotator()
 # RESIZE FRAME
 # =========================================================
 def resize_frame(frame, width=640):
+
     h, w = frame.shape[:2]
 
     if w <= width:
         return frame
 
     ratio = width / w
+
     height = int(h * ratio)
 
     resized = cv2.resize(frame, (width, height))
+
     return resized
 
 # =========================================================
@@ -122,13 +130,16 @@ def process_video(video_path):
     cap = cv2.VideoCapture(video_path)
 
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
     fps = int(cap.get(cv2.CAP_PROP_FPS))
 
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    # Resize output video
+    # Output video settings
     output_width = 640
+
     output_height = int(height * (output_width / width))
 
     output_path = "processed_output.mp4"
@@ -142,6 +153,7 @@ def process_video(video_path):
         (output_width, output_height)
     )
 
+    # Progress bar
     progress_bar = st.progress(0)
 
     frame_count = 0
@@ -157,7 +169,7 @@ def process_video(video_path):
 
         frame_count += 1
 
-        # Skip frames for faster processing
+        # Skip frames
         if frame_count % FRAME_SKIP != 0:
             continue
 
@@ -165,7 +177,8 @@ def process_video(video_path):
         frame = resize_frame(frame, output_width)
 
         try:
-            # Inference
+
+            # Run inference
             result = model.infer(frame).json()
 
             detections = sv.Detections.from_inference(result)
@@ -175,13 +188,14 @@ def process_video(video_path):
             for pred in result.get("predictions", []):
 
                 class_name = pred["class"]
+
                 confidence = pred["confidence"]
 
                 labels.append(
                     f"{class_name} {confidence:.2f}"
                 )
 
-                # Count defects
+                # Count classes
                 if "crack" in class_name.lower():
                     crack_count += 1
 
@@ -201,22 +215,26 @@ def process_video(video_path):
                 labels=labels
             )
 
+            # Save frame
             out.write(annotated_frame)
 
         except Exception as e:
+
             st.error(f"Inference Error: {e}")
 
-        # Update progress bar
+        # Update progress
         progress = min(frame_count / total_frames, 1.0)
+
         progress_bar.progress(progress)
 
     cap.release()
+
     out.release()
 
     return output_path, frame_count, crack_count, pothole_count
 
 # =========================================================
-# LAYOUT
+# UI LAYOUT
 # =========================================================
 col1, col2 = st.columns(2)
 
@@ -242,7 +260,7 @@ if uploaded_video and analyze_btn:
 
     st.info("Processing video... Please wait.")
 
-    # Save uploaded video temporarily
+    # Save uploaded file temporarily
     temp_input = tempfile.NamedTemporaryFile(
         delete=False,
         suffix=".mp4"
@@ -252,13 +270,14 @@ if uploaded_video and analyze_btn:
 
     temp_input.close()
 
-    # Process
+    # Run detection
     output_path, frames, cracks, potholes = process_video(
         temp_input.name
     )
 
-    # Display output video
+    # Display video
     with col2:
+
         st.video(output_path)
 
     # =====================================================
