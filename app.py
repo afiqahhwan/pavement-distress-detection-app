@@ -1,143 +1,306 @@
 import streamlit as st
 import cv2
 import tempfile
-from roboflow import Roboflow
+import os
 import supervision as sv
+from roboflow import Roboflow
 
-# ==========================================
+# =========================================================
 # PAGE CONFIG
-# ==========================================
-
+# =========================================================
 st.set_page_config(
     page_title="Pavement Distress Detection",
+    page_icon="🚧",
     layout="wide"
 )
 
-st.title("🚗 Pavement Distress Detection System")
+# =========================================================
+# CUSTOM CSS
+# =========================================================
+st.markdown("""
+<style>
+.main {
+    background-color: #0B1020;
+    color: white;
+}
+
+.stButton>button {
+    background-color: #7C3AED;
+    color: white;
+    border-radius: 10px;
+    height: 50px;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.stButton>button:hover {
+    background-color: #6D28D9;
+}
+
+.metric-box {
+    background-color: #111827;
+    padding: 15px;
+    border-radius: 10px;
+    text-align: center;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# =========================================================
+# HEADER
+# =========================================================
+st.title("🚧 Pavement Distress Detection System")
 
 st.markdown("""
-Upload a road inspection video to detect:
+### Final Year Project (FYP)
+
+This AI system uses:
+- YOLO Object Detection
+- Roboflow AI
+- Computer Vision
+- Deep Learning
+
+to automatically detect:
 - Cracks
 - Potholes
-- Pavement damage
+- Pavement defects
+
+from uploaded road inspection videos.
 """)
 
-# ==========================================
-# LOAD ROBOFLOW MODEL
-# ==========================================
-
-ROBOFLOW_API_KEY = "PEg5q48Ar8j8zKbAqHd7"
-
+# =========================================================
+# ROBOFLOW CONFIG
+# =========================================================
+ROBOFLOW_API_KEY = "YOUR_PRIVATE_API_KEY"
 PROJECT_ID = "pavement-distress-detection-c5hzn"
-
 VERSION_NUMBER = 1
 
-rf = Roboflow(api_key=ROBOFLOW_API_KEY)
+# =========================================================
+# LOAD MODEL
+# =========================================================
+@st.cache_resource
+def load_model():
+    rf = Roboflow(api_key=ROBOFLOW_API_KEY)
+    project = rf.workspace().project(PROJECT_ID)
+    model = project.version(VERSION_NUMBER).model
+    return model
 
-project = rf.workspace().project(PROJECT_ID)
+model = load_model()
 
-model = project.version(VERSION_NUMBER).model
+# =========================================================
+# VIDEO SETTINGS
+# =========================================================
+FRAME_SKIP = 2
+RESIZE_WIDTH = 640
 
-# ==========================================
+# =========================================================
 # ANNOTATORS
-# ==========================================
-
+# =========================================================
 box_annotator = sv.BoxAnnotator()
-
 label_annotator = sv.LabelAnnotator()
 
-# ==========================================
-# VIDEO UPLOAD
-# ==========================================
+# =========================================================
+# RESIZE FRAME
+# =========================================================
+def resize_frame(frame, width=640):
+    h, w = frame.shape[:2]
 
-uploaded_video = st.file_uploader(
-    "Upload Video",
-    type=["mp4", "mov", "avi"]
-)
+    if w <= width:
+        return frame
 
-# ==========================================
+    ratio = width / w
+    height = int(h * ratio)
+
+    resized = cv2.resize(frame, (width, height))
+    return resized
+
+# =========================================================
+# PROCESS VIDEO
+# =========================================================
+def process_video(video_path):
+
+    cap = cv2.VideoCapture(video_path)
+
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = int(cap.get(cv2.CAP_PROP_FPS))
+
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    # Resize output video
+    output_width = 640
+    output_height = int(height * (output_width / width))
+
+    output_path = "processed_output.mp4"
+
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+
+    out = cv2.VideoWriter(
+        output_path,
+        fourcc,
+        fps,
+        (output_width, output_height)
+    )
+
+    progress_bar = st.progress(0)
+
+    frame_count = 0
+    crack_count = 0
+    pothole_count = 0
+
+    while cap.isOpened():
+
+        ret, frame = cap.read()
+
+        if not ret:
+            break
+
+        frame_count += 1
+
+        # Skip frames for faster processing
+        if frame_count % FRAME_SKIP != 0:
+            continue
+
+        # Resize frame
+        frame = resize_frame(frame, output_width)
+
+        try:
+            # Inference
+            result = model.infer(frame).json()
+
+            detections = sv.Detections.from_inference(result)
+
+            labels = []
+
+            for pred in result.get("predictions", []):
+
+                class_name = pred["class"]
+                confidence = pred["confidence"]
+
+                labels.append(
+                    f"{class_name} {confidence:.2f}"
+                )
+
+                # Count defects
+                if "crack" in class_name.lower():
+                    crack_count += 1
+
+                if "pothole" in class_name.lower():
+                    pothole_count += 1
+
+            # Draw boxes
+            annotated_frame = box_annotator.annotate(
+                scene=frame.copy(),
+                detections=detections
+            )
+
+            # Draw labels
+            annotated_frame = label_annotator.annotate(
+                scene=annotated_frame,
+                detections=detections,
+                labels=labels
+            )
+
+            out.write(annotated_frame)
+
+        except Exception as e:
+            st.error(f"Inference Error: {e}")
+
+        # Update progress bar
+        progress = min(frame_count / total_frames, 1.0)
+        progress_bar.progress(progress)
+
+    cap.release()
+    out.release()
+
+    return output_path, frame_count, crack_count, pothole_count
+
+# =========================================================
+# LAYOUT
+# =========================================================
+col1, col2 = st.columns(2)
+
+with col1:
+
+    st.subheader("📤 Upload Road Video")
+
+    uploaded_video = st.file_uploader(
+        "Upload Video",
+        type=["mp4", "avi", "mov"]
+    )
+
+    analyze_btn = st.button("🚀 Analyze Video")
+
+with col2:
+
+    st.subheader("📥 Processed Output")
+
+# =========================================================
 # PROCESS BUTTON
-# ==========================================
+# =========================================================
+if uploaded_video and analyze_btn:
 
-if uploaded_video is not None:
+    st.info("Processing video... Please wait.")
 
-    st.video(uploaded_video)
+    # Save uploaded video temporarily
+    temp_input = tempfile.NamedTemporaryFile(
+        delete=False,
+        suffix=".mp4"
+    )
 
-    if st.button("Analyze Video"):
+    temp_input.write(uploaded_video.read())
 
-        with st.spinner("Processing video..."):
+    temp_input.close()
 
-            # Save uploaded file temporarily
-            temp_input = tempfile.NamedTemporaryFile(
-                delete=False,
-                suffix=".mp4"
-            )
+    # Process
+    output_path, frames, cracks, potholes = process_video(
+        temp_input.name
+    )
 
-            temp_input.write(uploaded_video.read())
+    # Display output video
+    with col2:
+        st.video(output_path)
 
-            input_path = temp_input.name
+    # =====================================================
+    # METRICS
+    # =====================================================
+    st.subheader("📊 Detection Summary")
 
-            output_path = "processed_output.mp4"
+    m1, m2, m3 = st.columns(3)
 
-            # ==================================
-            # CALLBACK
-            # ==================================
+    with m1:
+        st.metric("Frames Processed", frames)
 
-            def callback(frame, index):
+    with m2:
+        st.metric("Detected Cracks", cracks)
 
-                # Skip frames
-                if index % 5 != 0:
-                    return frame
+    with m3:
+        st.metric("Detected Potholes", potholes)
 
-                # Resize frame
-                frame = cv2.resize(frame, (416, 416))
+    # =====================================================
+    # DOWNLOAD BUTTON
+    # =====================================================
+    with open(output_path, "rb") as file:
 
-                # Run inference
-                result = model.predict(frame).json()
+        st.download_button(
+            label="⬇ Download Processed Video",
+            data=file,
+            file_name="processed_output.mp4",
+            mime="video/mp4"
+        )
 
-                detections = sv.Detections.from_inference(result)
+    st.success("Video analysis completed successfully!")
 
-                labels = [
-                    f"{pred['class']} {pred['confidence']:.2f}"
-                    for pred in result.get("predictions", [])
-                ]
+# =========================================================
+# FOOTER
+# =========================================================
+st.markdown("---")
 
-                annotated_frame = box_annotator.annotate(
-                    scene=frame.copy(),
-                    detections=detections
-                )
-
-                annotated_frame = label_annotator.annotate(
-                    scene=annotated_frame,
-                    detections=detections,
-                    labels=labels
-                )
-
-                return annotated_frame
-
-            # ==================================
-            # PROCESS VIDEO
-            # ==================================
-
-            sv.process_video(
-                source_path=input_path,
-                target_path=output_path,
-                callback=callback
-            )
-
-            st.success("Processing complete!")
-
-            # ==================================
-            # SHOW OUTPUT
-            # ==================================
-
-            st.video(output_path)
-
-            with open(output_path, "rb") as file:
-
-                st.download_button(
-                    label="Download Processed Video",
-                    data=file,
-                    file_name="processed_output.mp4",
-                    mime="video/mp4"
-                )
+st.markdown("""
+### 🛠 Technologies Used
+- Streamlit
+- Roboflow
+- YOLO
+- OpenCV
+- Supervision
+""")
