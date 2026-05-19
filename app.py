@@ -1,16 +1,16 @@
 import streamlit as st
 import cv2
 import tempfile
-import supervision as sv
-from roboflow import Roboflow
 import os
+from roboflow import Roboflow
+import numpy as np
+import time
 
 # =========================================================
 # PAGE CONFIG
 # =========================================================
-
 st.set_page_config(
-    page_title="Pavement Distress Detection System",
+    page_title="Pavement Distress Detection",
     page_icon="🛣️",
     layout="wide"
 )
@@ -18,101 +18,102 @@ st.set_page_config(
 # =========================================================
 # CUSTOM CSS
 # =========================================================
-
 st.markdown("""
 <style>
 
-html, body, [class*="css"] {
+.main {
     background-color: #050816;
     color: white;
-    font-family: 'Segoe UI';
 }
 
-.main-title {
-    font-size: 52px;
-    font-weight: 700;
+.stApp {
+    background-color: #050816;
+}
+
+h1, h2, h3 {
     color: white;
-}
-
-.subtitle {
-    font-size: 24px;
-    color: #b8c1ec;
 }
 
 .stButton>button {
-    width: 100%;
-    height: 60px;
-    border-radius: 12px;
-    background: linear-gradient(to right,#7c3aed,#2563eb);
+    background: linear-gradient(90deg, #7b2ff7, #f107a3);
     color: white;
-    font-size: 20px;
-    font-weight: bold;
+    border-radius: 12px;
     border: none;
+    height: 3em;
+    width: 100%;
+    font-size: 18px;
+    font-weight: bold;
 }
 
-.metric-box {
-    background: linear-gradient(135deg,#1f2937,#111827);
+.stButton>button:hover {
+    transform: scale(1.02);
+}
+
+.block-container {
+    padding-top: 2rem;
+}
+
+.metric-card {
+    background-color: #111827;
     padding: 20px;
     border-radius: 15px;
-    border: 1px solid #374151;
-    text-align: center;
+    border: 1px solid #1f2937;
 }
 
 </style>
 """, unsafe_allow_html=True)
 
 # =========================================================
+# HEADER
+# =========================================================
+st.title("🛣️ Pavement Distress Detection System")
+
+st.markdown("""
+### AI-Based Road Damage Detection
+
+Upload road inspection video to automatically detect:
+
+- Cracks
+- Potholes
+- Pavement Defects
+""")
+
+# =========================================================
 # SIDEBAR
 # =========================================================
-
 with st.sidebar:
 
-    st.title("⚙️ System Settings")
+    st.header("⚙️ System Settings")
 
     confidence = st.slider(
         "Confidence Threshold",
         10,
         100,
         40
-    ) / 100
+    )
+
+    frame_skip = st.slider(
+        "Processing Speed",
+        1,
+        10,
+        5
+    )
 
     st.markdown("---")
 
-    st.markdown("""
-    ### Recommended Settings
-
+    st.info("""
+    Recommended Video:
+    
     - Format: MP4
     - Resolution: 720p
-    - FPS: 24-30
-    - Large video support
-    - AI HD processing
+    - FPS: 20-30
+    - Size: Below 300MB
     """)
-
-# =========================================================
-# HEADER
-# =========================================================
-
-st.markdown("""
-<div class="main-title">
-🛣️ Pavement Distress Detection System
-</div>
-""", unsafe_allow_html=True)
-
-st.markdown("""
-<div class="subtitle">
-AI-Based Road Damage Detection & Video Analysis
-</div>
-""", unsafe_allow_html=True)
-
-st.markdown("<br>", unsafe_allow_html=True)
 
 # =========================================================
 # ROBOFLOW CONFIG
 # =========================================================
-
 ROBOFLOW_API_KEY = "PEg5q48Ar8j8zKbAqHd7"
-
-WORKSPACE_ID = "wans-workspace-na8wt"
 
 PROJECT_ID = "pavement-distress-detection-c5hzn"
 
@@ -121,47 +122,54 @@ VERSION_NUMBER = 1
 # =========================================================
 # LOAD MODEL
 # =========================================================
-
 @st.cache_resource
 def load_model():
 
     rf = Roboflow(api_key=ROBOFLOW_API_KEY)
 
-    workspace = rf.workspace(WORKSPACE_ID)
-
-    project = workspace.project(PROJECT_ID)
+    project = rf.workspace().project(PROJECT_ID)
 
     model = project.version(VERSION_NUMBER).model
 
     return model
 
-model = load_model()
+# =========================================================
+# LOAD MODEL SAFELY
+# =========================================================
+try:
+    model = load_model()
+    st.success("✅ AI Model Loaded Successfully")
+
+except Exception as e:
+    st.error(f"Model Loading Error: {e}")
+    st.stop()
 
 # =========================================================
 # VIDEO UPLOAD
 # =========================================================
-
 uploaded_video = st.file_uploader(
-    "📤 Upload Road Inspection Video",
-    type=["mp4", "mov", "avi", "mkv"]
+    "📤 Upload Road Video",
+    type=["mp4", "mov", "avi"]
 )
 
 # =========================================================
 # PROCESS VIDEO
 # =========================================================
-
 if uploaded_video is not None:
 
     st.video(uploaded_video)
 
-    if st.button("🚀 Start AI Analysis"):
+    analyze = st.button("🚀 Start AI Analysis")
 
-        with st.spinner("Analyzing pavement condition..."):
+    if analyze:
+
+        try:
+
+            st.info("⏳ Processing video... Please wait.")
 
             # =================================================
             # SAVE INPUT VIDEO
             # =================================================
-
             temp_input = tempfile.NamedTemporaryFile(
                 delete=False,
                 suffix=".mp4"
@@ -171,30 +179,24 @@ if uploaded_video is not None:
 
             input_path = temp_input.name
 
-            # =================================================
-            # VIDEO CAPTURE
-            # =================================================
+            output_path = "processed_output.mp4"
 
+            # =================================================
+            # OPEN VIDEO
+            # =================================================
             cap = cv2.VideoCapture(input_path)
-            max_frames = 1000
 
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
             fps = cap.get(cv2.CAP_PROP_FPS)
 
             if fps <= 0:
-                fps = 30
-
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                fps = 20
 
             # =================================================
-            # OUTPUT VIDEO
+            # VIDEO WRITER
             # =================================================
-
-            output_path = "processed_output.mp4"
-
-            fourcc = cv2.VideoWriter_fourcc(*'avc1')
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 
             out = cv2.VideoWriter(
                 output_path,
@@ -203,271 +205,194 @@ if uploaded_video is not None:
                 (width, height)
             )
 
-            # =================================================
-            # ANNOTATORS
-            # =================================================
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-            box_annotator = sv.BoxAnnotator(
-                thickness=3
-            )
+            progress_bar = st.progress(0)
 
-            label_annotator = sv.LabelAnnotator(
-                text_scale=0.7
-            )
-
-            # =================================================
-            # COUNTERS
-            # =================================================
-
-            total_detections = 0
-            crack_count = 0
-            pothole_count = 0
+            status_text = st.empty()
 
             frame_index = 0
 
-            progress_bar = st.progress(0)
+            max_frames = 1500
+
+            detection_count = 0
 
             # =================================================
             # PROCESS LOOP
             # =================================================
-
-            while cap.isOpened():
+            while True:
 
                 ret, frame = cap.read()
 
                 if not ret:
                     break
 
-                try:
-
-                    # =========================================
-                    # SKIP EVERY 2ND FRAME
-                    # =========================================
-
-                    if frame_index % 5 != 0:
-                        frame_index += 1
-                        continue
-
-                    # =========================================
-                    # RESIZE FOR FAST API INFERENCE
-                    # =========================================
-
-                    small_frame = cv2.resize(
-                        frame,
-                        (416, 234)
-                    )
-
-                    # =========================================
-                    # RUN AI DETECTION
-                    # =========================================
-
-                    result = model.predict(
-                        small_frame,
-                        confidence=confidence * 100
-                    ).json()
-
-                    detections = sv.Detections.from_inference(result)
-
-                    # =========================================
-                    # SCALE DETECTIONS
-                    # =========================================
-
-                    scale_x = width / 640
-                    scale_y = height / 360
-
-                    if len(detections) > 0:
-
-                        detections.xyxy[:, [0, 2]] *= scale_x
-                        detections.xyxy[:, [1, 3]] *= scale_y
-
-                    # =========================================
-                    # LABELS
-                    # =========================================
-
-                    labels = []
-
-                    for pred in result["predictions"]:
-
-                        cls = pred["class"]
-                        conf = pred["confidence"]
-
-                        labels.append(
-                            f"{cls} {conf:.2f}"
-                        )
-
-                        total_detections += 1
-
-                        if "crack" in cls.lower():
-                            crack_count += 1
-
-                        if "pothole" in cls.lower():
-                            pothole_count += 1
-
-                    # =========================================
-                    # DRAW DETECTIONS
-                    # =========================================
-
-                    annotated_frame = box_annotator.annotate(
-                        scene=frame.copy(),
-                        detections=detections
-                    )
-
-                    annotated_frame = label_annotator.annotate(
-                        scene=annotated_frame,
-                        detections=detections,
-                        labels=labels
-                    )
-
-                    # =========================================
-                    # PROFESSIONAL OVERLAY
-                    # =========================================
-
-                    overlay = annotated_frame.copy()
-
-                    cv2.rectangle(
-                        overlay,
-                        (20, 20),
-                        (470, 230),
-                        (0, 0, 0),
-                        -1
-                    )
-
-                    cv2.addWeighted(
-                        overlay,
-                        0.45,
-                        annotated_frame,
-                        0.55,
-                        0,
-                        annotated_frame
-                    )
-
-                    cv2.putText(
-                        annotated_frame,
-                        "ROAD AI ANALYSIS",
-                        (40, 60),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        1,
-                        (0,255,255),
-                        3
-                    )
-
-                    cv2.putText(
-                        annotated_frame,
-                        f"Frame: {frame_index}",
-                        (40, 100),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.8,
-                        (255,255,255),
-                        2
-                    )
-
-                    cv2.putText(
-                        annotated_frame,
-                        f"Detections: {total_detections}",
-                        (40, 135),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.8,
-                        (255,255,255),
-                        2
-                    )
-
-                    cv2.putText(
-                        annotated_frame,
-                        f"Cracks: {crack_count}",
-                        (40, 170),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.8,
-                        (0,255,0),
-                        2
-                    )
-
-                    cv2.putText(
-                        annotated_frame,
-                        f"Potholes: {pothole_count}",
-                        (40, 205),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.8,
-                        (0,0,255),
-                        2
-                    )
-
-                    # =========================================
-                    # WRITE OUTPUT VIDEO
-                    # =========================================
-
-                    out.write(annotated_frame)
-
-                except Exception as e:
-
-                    st.error(f"Inference Error: {e}")
-
                 frame_index += 1
 
-                progress_bar.progress(
-                    min(frame_index / total_frames, 1.0)
+                if frame_index > max_frames:
+                    break
+
+                # =============================================
+                # PROCESS EVERY N FRAMES
+                # =============================================
+                if frame_index % frame_skip == 0:
+
+                    try:
+
+                        # Resize for faster inference
+                        small_frame = cv2.resize(
+                            frame,
+                            (416, 234)
+                        )
+
+                        predictions = model.predict(
+                            small_frame,
+                            confidence=confidence,
+                            overlap=30
+                        ).json()
+
+                        for prediction in predictions["predictions"]:
+
+                            detection_count += 1
+
+                            x = prediction["x"]
+                            y = prediction["y"]
+                            w = prediction["width"]
+                            h = prediction["height"]
+
+                            class_name = prediction["class"]
+
+                            conf = prediction["confidence"]
+
+                            # Coordinates
+                            x1 = int(x - w / 2)
+                            y1 = int(y - h / 2)
+                            x2 = int(x + w / 2)
+                            y2 = int(y + h / 2)
+
+                            # Scale back
+                            scale_x = width / 416
+                            scale_y = height / 234
+
+                            x1 = int(x1 * scale_x)
+                            y1 = int(y1 * scale_y)
+                            x2 = int(x2 * scale_x)
+                            y2 = int(y2 * scale_y)
+
+                            # =================================
+                            # PROFESSIONAL BOX
+                            # =================================
+                            cv2.rectangle(
+                                frame,
+                                (x1, y1),
+                                (x2, y2),
+                                (0, 255, 0),
+                                3
+                            )
+
+                            label = f"{class_name} {conf:.2f}"
+
+                            cv2.rectangle(
+                                frame,
+                                (x1, y1 - 35),
+                                (x1 + 220, y1),
+                                (0, 255, 0),
+                                -1
+                            )
+
+                            cv2.putText(
+                                frame,
+                                label,
+                                (x1 + 10, y1 - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.8,
+                                (0, 0, 0),
+                                2
+                            )
+
+                    except Exception as infer_error:
+                        st.warning(f"Inference Error: {infer_error}")
+
+                # =============================================
+                # WRITE FRAME
+                # =============================================
+                out.write(frame)
+
+                # =============================================
+                # UPDATE PROGRESS
+                # =============================================
+                progress = min(
+                    frame_index / total_frames,
+                    1.0
+                )
+
+                progress_bar.progress(progress)
+
+                status_text.text(
+                    f"Processing Frame: {frame_index}/{total_frames}"
                 )
 
             # =================================================
             # RELEASE
             # =================================================
-
             cap.release()
             out.release()
-            cv2.destroyAllWindows()
 
             # =================================================
-            # SHOW RESULTS
+            # RESULTS
             # =================================================
-
-            st.success("AI Analysis Complete")
-
-            with open(output_path, "rb") as video_file:
-                video_bytes = video_file.read()
-
-            st.video(video_bytes)
-
-            # =================================================
-            # METRICS
-            # =================================================
+            st.success("✅ Video Analysis Complete")
 
             col1, col2, col3 = st.columns(3)
 
             with col1:
                 st.metric(
-                    "Total Detections",
-                    total_detections
+                    "Frames Processed",
+                    frame_index
                 )
 
             with col2:
                 st.metric(
-                    "Cracks",
-                    crack_count
+                    "Detections",
+                    detection_count
                 )
 
             with col3:
                 st.metric(
-                    "Potholes",
-                    pothole_count
+                    "Processing Speed",
+                    f"1/{frame_skip} Frames"
                 )
+
+            st.markdown("---")
+
+            st.subheader("🎥 Processed Video")
+
+            st.video(output_path)
 
             # =================================================
             # DOWNLOAD BUTTON
             # =================================================
-
             with open(output_path, "rb") as file:
 
                 st.download_button(
-                    "⬇️ Download Processed Video",
-                    file,
-                    file_name="processed_output.mp4"
+                    label="⬇️ Download Processed Video",
+                    data=file,
+                    file_name="processed_output.mp4",
+                    mime="video/mp4"
                 )
+
+            # =================================================
+            # CLEANUP
+            # =================================================
+            os.remove(input_path)
+
+        except Exception as e:
+
+            st.error(f"Processing Error: {e}")
 
 # =========================================================
 # FOOTER
 # =========================================================
-
 st.markdown("---")
 
-st.caption(
-    "Developed for Pavement Distress Detection Research"
-)
+st.caption("Developed for Pavement Distress Detection Research")
