@@ -252,8 +252,21 @@ if uploaded_video is not None:
                     # ROBOFLOW INFERENCE
                     # =====================================
 
-                    result = model.predict(
+                   # =====================================
+                    # RESIZE FRAME FOR FAST API INFERENCE
+                    # =====================================
+
+                    small_frame = cv2.resize(
                         frame,
+                        (640, 360)
+                    )
+
+                    # =====================================
+                    # RUN AI DETECTION
+                    # =====================================
+
+                    result = model.predict(
+                        small_frame,
                         confidence=confidence * 100
                     ).json()
 
