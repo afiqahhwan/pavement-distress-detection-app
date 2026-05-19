@@ -80,6 +80,7 @@ from uploaded road inspection videos.
 # =========================================================
 # ROBOFLOW CONFIG
 # =========================================================
+
 ROBOFLOW_API_KEY = "PEg5q48Ar8j8zKbAqHd7"
 
 WORKSPACE_ID = "wans-workspace-na8wt"
@@ -151,7 +152,7 @@ def process_video(video_path):
 
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    # Output video size
+    # Output video settings
     output_width = 480
 
     output_height = int(height * (output_width / width))
@@ -195,8 +196,14 @@ def process_video(video_path):
 
         try:
 
-            # Run inference
-            result = model.infer(frame).json()
+            # =================================================
+            # ROBOFLOW PREDICTION
+            # =================================================
+            result = model.predict(
+                frame,
+                confidence=40,
+                overlap=30
+            ).json()
 
             detections = sv.Detections.from_inference(result)
 
@@ -212,26 +219,31 @@ def process_video(video_path):
                     f"{class_name} {confidence:.2f}"
                 )
 
-                # Count detections
+                # Count defects
                 if "crack" in class_name.lower():
                     crack_count += 1
 
                 if "pothole" in class_name.lower():
                     pothole_count += 1
 
-            # Draw boxes
+            # =================================================
+            # DRAW BOXES
+            # =================================================
             annotated_frame = box_annotator.annotate(
                 scene=frame.copy(),
                 detections=detections
             )
 
-            # Draw labels
+            # =================================================
+            # DRAW LABELS
+            # =================================================
             annotated_frame = label_annotator.annotate(
                 scene=annotated_frame,
                 detections=detections,
                 labels=labels
             )
 
+            # Write frame
             out.write(annotated_frame)
 
         except Exception as e:
@@ -254,7 +266,7 @@ def process_video(video_path):
     return output_path, frame_count, crack_count, pothole_count
 
 # =========================================================
-# MAIN LAYOUT
+# UI LAYOUT
 # =========================================================
 col1, col2 = st.columns(2)
 
@@ -270,6 +282,7 @@ with col1:
         type=["mp4", "avi", "mov"]
     )
 
+    # File size info
     if uploaded_video is not None:
 
         file_size = uploaded_video.size / (1024 * 1024)
@@ -294,7 +307,7 @@ with col2:
     st.subheader("📥 Processed Output")
 
 # =========================================================
-# ANALYZE VIDEO
+# PROCESS BUTTON
 # =========================================================
 if uploaded_video and analyze_btn:
 
@@ -355,12 +368,5 @@ if uploaded_video and analyze_btn:
 # =========================================================
 st.markdown("---")
 
-st.markdown("""
-### 🛠 Technologies Used
-- Streamlit
-- Roboflow
-- YOLO
-- OpenCV
-- Supervision
-- Computer Vision
+n
 """)
