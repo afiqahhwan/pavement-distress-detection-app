@@ -1,10 +1,9 @@
 import streamlit as st
 import cv2
 import tempfile
-import os
 import supervision as sv
-import numpy as np
 from roboflow import Roboflow
+import os
 
 # =========================================================
 # PAGE CONFIG
@@ -40,21 +39,6 @@ html, body, [class*="css"] {
     color: #b8c1ec;
 }
 
-.info-box {
-    background-color: #111827;
-    padding: 20px;
-    border-radius: 12px;
-    border: 1px solid #374151;
-}
-
-.metric-box {
-    background: linear-gradient(135deg,#1f2937,#111827);
-    padding: 20px;
-    border-radius: 15px;
-    text-align: center;
-    border: 1px solid #374151;
-}
-
 .stButton>button {
     width: 100%;
     height: 60px;
@@ -64,6 +48,14 @@ html, body, [class*="css"] {
     font-size: 20px;
     font-weight: bold;
     border: none;
+}
+
+.metric-box {
+    background: linear-gradient(135deg,#1f2937,#111827);
+    padding: 20px;
+    border-radius: 15px;
+    border: 1px solid #374151;
+    text-align: center;
 }
 
 </style>
@@ -87,12 +79,13 @@ with st.sidebar:
     st.markdown("---")
 
     st.markdown("""
-    ### Recommended Video Settings
+    ### Recommended Settings
 
-    - Format: MP4
-    - Resolution: 720p / 1080p
+    - Video Format: MP4
+    - Resolution: 720p
     - FPS: 24-30
-    - Max Size: 1GB
+    - Supports Large Videos
+    - HD AI Processing
     """)
 
 # =========================================================
@@ -154,7 +147,7 @@ uploaded_video = st.file_uploader(
 )
 
 # =========================================================
-# ANALYSIS BUTTON
+# PROCESS VIDEO
 # =========================================================
 
 if uploaded_video is not None:
@@ -163,11 +156,11 @@ if uploaded_video is not None:
 
     if st.button("🚀 Start AI Analysis"):
 
-        with st.spinner("Analyzing pavement condition..."):
+        with st.spinner("Analyzing road condition..."):
 
-            # =============================================
-            # SAVE TEMP INPUT VIDEO
-            # =============================================
+            # =================================================
+            # SAVE INPUT VIDEO
+            # =================================================
 
             temp_input = tempfile.NamedTemporaryFile(
                 delete=False,
@@ -178,13 +171,14 @@ if uploaded_video is not None:
 
             input_path = temp_input.name
 
-            # =============================================
+            # =================================================
             # VIDEO CAPTURE
-            # =============================================
+            # =================================================
 
             cap = cv2.VideoCapture(input_path)
 
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
             fps = cap.get(cv2.CAP_PROP_FPS)
@@ -194,9 +188,9 @@ if uploaded_video is not None:
 
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-            # =============================================
+            # =================================================
             # OUTPUT VIDEO
-            # =============================================
+            # =================================================
 
             output_path = "processed_output.mp4"
 
@@ -209,9 +203,9 @@ if uploaded_video is not None:
                 (width, height)
             )
 
-            # =============================================
+            # =================================================
             # ANNOTATORS
-            # =============================================
+            # =================================================
 
             box_annotator = sv.BoxAnnotator(
                 thickness=3
@@ -221,9 +215,9 @@ if uploaded_video is not None:
                 text_scale=0.7
             )
 
-            # =============================================
-            # DETECTION COUNTERS
-            # =============================================
+            # =================================================
+            # COUNTERS
+            # =================================================
 
             total_detections = 0
 
@@ -235,9 +229,9 @@ if uploaded_video is not None:
 
             progress_bar = st.progress(0)
 
-            # =============================================
-            # PROCESS VIDEO
-            # =============================================
+            # =================================================
+            # PROCESS LOOP
+            # =================================================
 
             while cap.isOpened():
 
@@ -248,22 +242,26 @@ if uploaded_video is not None:
 
                 try:
 
-                    # =====================================
-                    # ROBOFLOW INFERENCE
-                    # =====================================
+                    # =========================================
+                    # OPTIONAL FRAME SKIPPING
+                    # =========================================
 
-                   # =====================================
-                    # RESIZE FRAME FOR FAST API INFERENCE
-                    # =====================================
+                    if frame_index % 2 != 0:
+                        frame_index += 1
+                        continue
+
+                    # =========================================
+                    # RESIZE FOR FAST API INFERENCE
+                    # =========================================
 
                     small_frame = cv2.resize(
                         frame,
                         (640, 360)
                     )
 
-                    # =====================================
+                    # =========================================
                     # RUN AI DETECTION
-                    # =====================================
+                    # =========================================
 
                     result = model.predict(
                         small_frame,
@@ -271,6 +269,22 @@ if uploaded_video is not None:
                     ).json()
 
                     detections = sv.Detections.from_inference(result)
+
+                    # =========================================
+                    # SCALE BOXES TO HD VIDEO
+                    # =========================================
+
+                    scale_x = width / 640
+
+                    scale_y = height / 360
+
+                    detections.xyxy[:, [0, 2]] *= scale_x
+
+                    detections.xyxy[:, [1, 3]] *= scale_y
+
+                    # =========================================
+                    # LABELS
+                    # =========================================
 
                     labels = []
 
@@ -292,9 +306,9 @@ if uploaded_video is not None:
                         if "pothole" in cls.lower():
                             pothole_count += 1
 
-                    # =====================================
+                    # =========================================
                     # DRAW DETECTIONS
-                    # =====================================
+                    # =========================================
 
                     annotated_frame = box_annotator.annotate(
                         scene=frame.copy(),
@@ -307,16 +321,16 @@ if uploaded_video is not None:
                         labels=labels
                     )
 
-                    # =====================================
-                    # PROFESSIONAL AI PANEL
-                    # =====================================
+                    # =========================================
+                    # PROFESSIONAL OVERLAY
+                    # =========================================
 
                     overlay = annotated_frame.copy()
 
                     cv2.rectangle(
                         overlay,
                         (20, 20),
-                        (450, 220),
+                        (470, 230),
                         (0, 0, 0),
                         -1
                     )
@@ -352,7 +366,7 @@ if uploaded_video is not None:
 
                     cv2.putText(
                         annotated_frame,
-                        f"Detections: {total_detections}",
+                        f"Total Detections: {total_detections}",
                         (40, 135),
                         cv2.FONT_HERSHEY_SIMPLEX,
                         0.8,
@@ -380,13 +394,14 @@ if uploaded_video is not None:
                         2
                     )
 
-                    # =====================================
-                    # WRITE OUTPUT
-                    # =====================================
+                    # =========================================
+                    # WRITE OUTPUT VIDEO
+                    # =========================================
 
                     out.write(annotated_frame)
 
                 except Exception as e:
+
                     st.error(f"Inference Error: {e}")
 
                 frame_index += 1
@@ -395,9 +410,9 @@ if uploaded_video is not None:
                     min(frame_index / total_frames, 1.0)
                 )
 
-            # =============================================
-            # RELEASE
-            # =============================================
+            # =================================================
+            # RELEASE RESOURCES
+            # =================================================
 
             cap.release()
 
@@ -405,17 +420,17 @@ if uploaded_video is not None:
 
             cv2.destroyAllWindows()
 
-            # =============================================
-            # RESULTS
-            # =============================================
+            # =================================================
+            # DISPLAY OUTPUT
+            # =================================================
 
-            st.success("Analysis Complete")
+            st.success("AI Analysis Complete")
 
             st.video(output_path)
 
-            # =============================================
+            # =================================================
             # METRICS
-            # =============================================
+            # =================================================
 
             col1, col2, col3 = st.columns(3)
 
@@ -437,9 +452,9 @@ if uploaded_video is not None:
                     pothole_count
                 )
 
-            # =============================================
+            # =================================================
             # DOWNLOAD BUTTON
-            # =============================================
+            # =================================================
 
             with open(output_path, "rb") as file:
 
