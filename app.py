@@ -3,6 +3,7 @@ import cv2
 import tempfile
 import supervision as sv
 from roboflow import Roboflow
+import os
 
 # =========================================================
 # PAGE CONFIG
@@ -14,27 +15,41 @@ st.set_page_config(
 )
 
 # =========================================================
-# CUSTOM UI STYLE
+# CUSTOM CSS
 # =========================================================
 st.markdown("""
 <style>
 
-.main {
+html, body, [class*="css"] {
     background-color: #0B1020;
     color: white;
 }
 
-.stButton>button {
+.main {
+    background-color: #0B1020;
+}
+
+h1, h2, h3 {
+    color: white;
+}
+
+.stButton > button {
     background-color: #7C3AED;
     color: white;
     border-radius: 10px;
     height: 50px;
     font-size: 18px;
     font-weight: bold;
+    width: 100%;
 }
 
-.stButton>button:hover {
+.stButton > button:hover {
     background-color: #6D28D9;
+    color: white;
+}
+
+[data-testid="stMetricValue"] {
+    color: white;
 }
 
 </style>
@@ -65,7 +80,6 @@ from uploaded road inspection videos.
 # =========================================================
 # ROBOFLOW CONFIG
 # =========================================================
-
 ROBOFLOW_API_KEY = "PEg5q48Ar8j8zKbAqHd7"
 
 WORKSPACE_ID = "wans-workspace-na8wt"
@@ -95,8 +109,8 @@ model = load_model()
 # =========================================================
 # SETTINGS
 # =========================================================
-FRAME_SKIP = 2
-RESIZE_WIDTH = 640
+FRAME_SKIP = 5
+RESIZE_WIDTH = 480
 
 # =========================================================
 # ANNOTATORS
@@ -107,7 +121,7 @@ label_annotator = sv.LabelAnnotator()
 # =========================================================
 # RESIZE FRAME
 # =========================================================
-def resize_frame(frame, width=640):
+def resize_frame(frame, width=480):
 
     h, w = frame.shape[:2]
 
@@ -137,8 +151,8 @@ def process_video(video_path):
 
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    # Output video settings
-    output_width = 640
+    # Output video size
+    output_width = 480
 
     output_height = int(height * (output_width / width))
 
@@ -153,11 +167,14 @@ def process_video(video_path):
         (output_width, output_height)
     )
 
-    # Progress bar
     progress_bar = st.progress(0)
 
+    status_text = st.empty()
+
     frame_count = 0
+
     crack_count = 0
+
     pothole_count = 0
 
     while cap.isOpened():
@@ -195,7 +212,7 @@ def process_video(video_path):
                     f"{class_name} {confidence:.2f}"
                 )
 
-                # Count classes
+                # Count detections
                 if "crack" in class_name.lower():
                     crack_count += 1
 
@@ -215,7 +232,6 @@ def process_video(video_path):
                 labels=labels
             )
 
-            # Save frame
             out.write(annotated_frame)
 
         except Exception as e:
@@ -227,6 +243,10 @@ def process_video(video_path):
 
         progress_bar.progress(progress)
 
+        status_text.text(
+            f"Processing frame {frame_count}/{total_frames}"
+        )
+
     cap.release()
 
     out.release()
@@ -234,10 +254,13 @@ def process_video(video_path):
     return output_path, frame_count, crack_count, pothole_count
 
 # =========================================================
-# UI LAYOUT
+# MAIN LAYOUT
 # =========================================================
 col1, col2 = st.columns(2)
 
+# =========================================================
+# LEFT COLUMN
+# =========================================================
 with col1:
 
     st.subheader("📤 Upload Road Video")
@@ -247,20 +270,37 @@ with col1:
         type=["mp4", "avi", "mov"]
     )
 
+    if uploaded_video is not None:
+
+        file_size = uploaded_video.size / (1024 * 1024)
+
+        st.info(
+            f"Uploaded Video Size: {file_size:.2f} MB"
+        )
+
+        if file_size > 150:
+
+            st.warning(
+                "Large videos may take longer to process."
+            )
+
     analyze_btn = st.button("🚀 Analyze Video")
 
+# =========================================================
+# RIGHT COLUMN
+# =========================================================
 with col2:
 
     st.subheader("📥 Processed Output")
 
 # =========================================================
-# PROCESS BUTTON
+# ANALYZE VIDEO
 # =========================================================
 if uploaded_video and analyze_btn:
 
     st.info("Processing video... Please wait.")
 
-    # Save uploaded file temporarily
+    # Save uploaded video temporarily
     temp_input = tempfile.NamedTemporaryFile(
         delete=False,
         suffix=".mp4"
@@ -270,12 +310,12 @@ if uploaded_video and analyze_btn:
 
     temp_input.close()
 
-    # Run detection
+    # Process video
     output_path, frames, cracks, potholes = process_video(
         temp_input.name
     )
 
-    # Display video
+    # Display output video
     with col2:
 
         st.video(output_path)
@@ -322,4 +362,5 @@ st.markdown("""
 - YOLO
 - OpenCV
 - Supervision
+- Computer Vision
 """)
