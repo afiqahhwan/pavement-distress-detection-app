@@ -12,8 +12,24 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🛣️ Pavement Distress Detection")
+st.title("🛣️ Intelligent Pavement Distress Detection System")
 
+st.markdown("""
+### Developed for Pavement Detection Research
+
+AI-powered road surface inspection system for automated pavement distress analysis.
+""")
+st.markdown("""
+### 🔍 Pavement Distress Types Detected
+
+This intelligent system automatically detects:
+
+- ✅ Cracks
+- ✅ Potholes
+- ✅ Patching
+
+The uploaded road inspection video will be analyzed frame-by-frame using AI detection technology.
+""")
 # ======================================
 # API
 # ======================================
@@ -168,3 +184,16 @@ if uploaded_video is not None:
             )
 
         os.remove(input_path)
+
+st.markdown("---")
+
+st.markdown("""
+<div style='text-align: center; color: gray; padding: 15px;'>
+
+Developed for Pavement Detection Research
+
+Intelligent AI System for Detecting:
+Cracks • Potholes • Patching
+
+</div>
+""", unsafe_allow_html=True)
